@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Database Chat Interface</title>
+
+    <!-- AnyChart Libraries -->
+    <script src="https://cdn.anychart.com/releases/v8/js/anychart-base.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/v8/js/anychart-ui.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/v8/js/anychart-exports.min.js"></script>
+    <link href="https://cdn.anychart.com/releases/v8/css/anychart-ui.min.css" type="text/css" rel="stylesheet" />
+    <link
+      href="https://cdn.anychart.com/releases/v8/fonts/css/anychart-font.min.css"
+      type="text/css"
+      rel="stylesheet"
+    />
+
+    <!-- Tableau Extension -->
+    <script src="/tableau.extensions.1.latest.min.js"></script>
+
+    <style>
+      /* Basic page setup */
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        background-color: #f0f2f5; /* Slightly lighter gray */
+      }
+
+      #container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      h2 {
+        margin-bottom: 20px;
+      }
+
+      /* Chat Box */
+      #chat-box {
+        width: 60%;
+        max-width: 800px;
+        height: 400px;
+        overflow-y: auto;
+        border: 1px solid #ccc;
+        background-color: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+
+      .message {
+        padding: 10px 15px;
+        margin: 10px 0;
+        border-radius: 20px;
+        max-width: 80%;
+        line-height: 1.4em;
+      }
+
+      /* User (right-aligned) */
+      .user-message {
+        background-color: #007bff;
+        color: #fff;
+        align-self: flex-end;
+        text-align: right;
+        border-bottom-right-radius: 0;
+      }
+
+      /* Bot (left-aligned) */
+      .bot-message {
+        background-color: #e9ecef;
+        color: #333;
+        align-self: flex-start;
+        text-align: left;
+        border-bottom-left-radius: 0;
+      }
+
+      /* Query Container */
+      #query-container {
+        width: 60%;
+        max-width: 800px;
+        display: flex;
+        align-items: center;
+      }
+
+      #query-input {
+        flex: 1;
+        padding: 10px;
+        font-size: 16px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        margin-right: 10px;
+      }
+
+      /* Send Button */
+      #query-button {
+        padding: 10px 20px;
+        font-size: 16px;
+        color: #fff;
+        background-color: #007bff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      }
+
+      #query-button:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="container">
+      <h2>Database Chat Interface</h2>
+
+      <div id="chat-box"></div>
+
+      <div id="query-container">
+        <input type="text" id="query-input" placeholder="Ask a question about the data..." />
+        <button id="query-button">Send</button>
+      </div>
+    </div>
+
+    <script>
+      anychart.onDocumentReady(function () {
+        const chatBox = document.getElementById("chat-box");
+        const queryInput = document.getElementById("query-input");
+        const queryButton = document.getElementById("query-button");
+
+        function addMessageToChat(text, sender) {
+          const messageDiv = document.createElement("div");
+          messageDiv.classList.add("message", sender === "user" ? "user-message" : "bot-message");
+          messageDiv.textContent = text;
+          chatBox.appendChild(messageDiv);
+          chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll to latest message
+        }
+
+        async function askDatabase(question) {
+          try {
+            const response = await fetch(`http://127.0.0.1:3308/api/ask-database-set/${encodeURIComponent(question)}`, {
+              method: "GET",
+              mode: "cors",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            });
+
+            const data = await response.json();
+            console.log("Hello from answer", data.message);
+
+            // Remove "Query generated: " from the response
+            let message = data.message.replace("Query generated: ", "");
+            console.log("Hello from message", message);
+
+            // Example logic for updating the dashboard
+            if (question.toLowerCase().startsWith("give me")) {
+              console.log("Hello from give me");
+              const dashboard = tableau.extensions.dashboardContent.dashboard;
+              const workSheet = dashboard.worksheets[0];
+              await workSheet.getDataSourcesAsync().then((datasources) => {
+                datasources[0].refreshAsync().then(() => {
+                  console.log("Data source refreshed");
+                });
+              });
+              return "Hi, I have updated the view.";
+            }
+
+            return message || "No answer returned.";
+          } catch (error) {
+            console.error("Error fetching response:", error);
+            return "Error retrieving answer.";
+          }
+        }
+
+        queryButton.addEventListener("click", async () => {
+          const question = queryInput.value.trim();
+          if (question === "") {
+            return;
+          }
+
+          addMessageToChat(question, "user");
+          queryInput.value = ""; // Clear input box
+
+          const answer = await askDatabase(question);
+          addMessageToChat(answer, "bot");
+        });
+
+        window.tableau.extensions.initializeAsync({ configure: null }).then(function () {
+          console.log("Tableau Extension Initialized");
+          const dashboard = tableau.extensions.dashboardContent.dashboard;
+        });
+      });
+    </script>
+  </body>
+</html>
